@@ -1,0 +1,10 @@
+@import 'tailwindcss';
+
+@theme {
+	--font-sans: 'Urbanist', sans-serif;
+	--color-cream: #f2f2da;
+}
+
+.rounded-smooth {
+	corner-shape: superellipse(1.15);
+}
