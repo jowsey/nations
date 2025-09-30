@@ -1,52 +1,29 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { Application, Assets, Container, Sprite } from 'pixi.js';
-	import { authClient } from '$lib/auth-client';
-	import SidebarItem from '$lib/components/SidebarItem.svelte';
-	import StyledButton from '$lib/components/StyledButton.svelte';
 	import { resolve } from '$app/paths';
+	import { authClient } from '$lib/auth-client';
 	import { page } from '$app/state';
 	import { fly } from 'svelte/transition';
+	import WorldMap from '$lib/components/WorldMap.svelte';
+	import SidebarItem from '$lib/components/SidebarItem.svelte';
+	import StyledButton from '$lib/components/StyledButton.svelte';
 
 	let { data, children } = $props();
 
-	let worldCanvas: HTMLCanvasElement | null = $state(null);
-	let app: Application | undefined;
+	let mapData: ArrayBuffer | undefined = $state(undefined);
+
+	const fetchMapData = async () => {
+		const data = await fetch('/api/map');
+		if (data.ok) {
+			mapData = await data.arrayBuffer();
+		}
+	};
 
 	onMount(() => {
-		(async () => {
-			if (!worldCanvas || !data.session) return; // todo stick this in a component so it only renders when authed
-
-			app = new Application();
-			await app.init({ background: '#25acf5', resizeTo: worldCanvas, canvas: worldCanvas });
-
-			const container = new Container();
-			app.stage.addChild(container);
-
-			const texture = await Assets.load('https://pixijs.com/assets/bunny.png');
-			for (let i = 0; i < 25; i++) {
-				const bunny = new Sprite(texture);
-
-				bunny.x = (i % 5) * 40;
-				bunny.y = Math.floor(i / 5) * 40;
-				container.addChild(bunny);
-			}
-
-			container.x = app.screen.width / 2;
-			container.y = app.screen.height / 2;
-
-			container.pivot.x = container.width / 2;
-			container.pivot.y = container.height / 2;
-
-			app.ticker.add((time) => {
-				container.rotation -= 0.01 * time.deltaTime;
-			});
-		})();
-
-		return () => {
-			app?.destroy();
-		};
+		if (data.session) {
+			fetchMapData();
+		}
 	});
 </script>
 
@@ -61,12 +38,12 @@
 			</StyledButton>
 		</div>
 	{:else}
-		<div class="flex size-full">
-			<div class="h-dvh w-fit overflow-y-auto border-r-2 border-neutral-950 bg-cream p-4">
+		<div class="flex h-full w-fit">
+			<div class="z-10 h-dvh w-fit overflow-y-auto border-r-2 border-neutral-950 bg-cream p-4">
 				{@render children?.()}
 			</div>
 
-			<div class="flex h-full min-w-fit grow flex-col gap-y-2 p-2.5">
+			<div class="z-10 flex h-full min-w-fit grow flex-col gap-y-2 p-2.5">
 				<SidebarItem class="justify-self-end" label="Options" href="/options" />
 				{#if page.url.pathname !== '/'}
 					<a
@@ -79,7 +56,7 @@
 				{/if}
 			</div>
 
-			<canvas bind:this={worldCanvas} class="absolute inset-0 -z-10 size-full"></canvas>
+			<WorldMap class="absolute inset-0 size-full" data={mapData} />
 		</div>
 	{/if}
 </div>

@@ -2,20 +2,8 @@ import alea from 'alea';
 import { createNoise2D } from 'simplex-noise';
 import { db } from '../db';
 import { mapCells } from '../db/schema';
-
-interface CellPosition {
-	q: number;
-	r: number;
-}
-
-interface HexCell extends CellPosition {
-	height: number;
-}
-
-interface Vector2 {
-	x: number;
-	y: number;
-}
+import type { CellPosition, HexCell, StringCoords, Vector2 } from '$lib/shared/types';
+import { offsetToEvenQ } from '$lib/shared/map';
 
 // Generate fractal noise
 const fractal = (
@@ -37,38 +25,41 @@ const fractal = (
 	return total / maxValue;
 };
 
-// Convert axial coordinates to odd-r offset coordinates
-const hexToXY = (hex: CellPosition): Vector2 => {
-	return { x: hex.q + (hex.r - (hex.r % 2)) * 0.5, y: hex.r };
-};
-
 class WorldMap {
-	private cells: Map<string, HexCell> = new Map();
-	private dimensions: Vector2;
-	private seed: string;
-
-	constructor(dimensions: Vector2, seed?: string) {
-		this.dimensions = dimensions;
-
-		this.seed = seed || Math.random().toString();
-		this.regenerate(this.seed);
-	}
+	private cells: Map<StringCoords, HexCell> = new Map();
+	private dimensions: Vector2 = { x: 0, y: 0 };
+	private seed: string = '';
 
 	// Generate a new map
-	private regenerate(seed: string) {
+	public regenerate(dimensions: Vector2, seed: string) {
+		this.dimensions = dimensions;
+		this.seed = seed;
+
 		const prng = alea(seed);
 		const noise = createNoise2D(prng);
 		this.cells.clear();
 
-		for (let q = 0; q <= this.dimensions.x; q++) {
-			for (let r = 0; r <= this.dimensions.y; r++) {
+		let lowestHeight = Infinity;
+		let highestHeight = -Infinity;
+
+		for (let q = 0; q <= dimensions.x; q++) {
+			for (let r = 0; r <= dimensions.y; r++) {
 				const axialPos = { q, r };
-				const offsetPos = hexToXY(axialPos);
-				const height = fractal(noise, { x: offsetPos.x / 50, y: offsetPos.y / 50 }, 5);
+				const offsetPos = offsetToEvenQ(axialPos);
+				const height = fractal(noise, { x: offsetPos.x / 50, y: offsetPos.y / 50 }, 5) * 0.5 + 0.5;
 
 				this.cells.set(`${q},${r}`, { q, r, height });
+
+				if (height < lowestHeight) lowestHeight = height;
+				if (height > highestHeight) highestHeight = height;
 			}
 		}
+
+		// normalize
+		const heightRange = highestHeight - lowestHeight;
+		this.cells.forEach((cell) => {
+			cell.height = (cell.height - lowestHeight) / heightRange;
+		});
 	}
 
 	public async pushToDb() {
@@ -76,8 +67,23 @@ class WorldMap {
 
 		await db.transaction(async (tx) => {
 			await tx.delete(mapCells);
-			await tx.insert(mapCells).values(Array.from(this.cells.values()));
+			const values = Array.from(this.cells.values());
+			values.forEach(async (cell) => {
+				await tx.insert(mapCells).values(cell);
+			});
 		});
+
+		console.log('^ Done.');
+	}
+
+	public async pullFromDb() {
+		console.log('Pulling map from db...');
+
+		const rows = await db.select().from(mapCells);
+		this.cells.clear();
+		for (const row of rows) {
+			this.cells.set(`${row.q},${row.r}`, row);
+		}
 
 		console.log('^ Done.');
 	}
@@ -87,5 +93,7 @@ class WorldMap {
 	}
 }
 
-const map = new WorldMap({ x: 200, y: 100 }, 'gaming');
+const map = new WorldMap();
+// await map.pullFromDb();
+await map.regenerate({ x: 200, y: 120 }, 'gaming5');
 await map.pushToDb();
