@@ -2,7 +2,6 @@
 	import type { HexCell, StringCoords, Vector2 } from '$lib/shared/types';
 	import type { SvelteHTMLElements } from 'svelte/elements';
 	import { onMount, untrack } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
 	import { offsetToEvenQ } from '$lib/shared/map';
 
 	import * as THREE from 'three';
@@ -24,7 +23,9 @@
 	const tileOversizing = 4 / 3; // reduce gaps
 	const zAxisScale = 0.866; // cos(30deg)  hexagons suck
 
-	const map: Map<StringCoords, HexCell> = new SvelteMap();
+	// fuck you and your slow-ass map implementation
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const map: Map<StringCoords, HexCell> = new Map();
 	let mapDimensions: Vector2 | undefined = $state(undefined);
 
 	let mapContainer: HTMLDivElement;
@@ -41,9 +42,9 @@
 	let tileMeshLoaded = $state(false);
 
 	let tileMaterial: THREE.MeshStandardMaterial;
-	let grassColor: THREE.Color;
-	let waterColor: THREE.Color;
-	let mountainColor: THREE.Color;
+	let grassColour: THREE.Color;
+	let waterColour: THREE.Color;
+	let mountainColour: THREE.Color;
 
 	let lastTime: number | undefined = undefined;
 	const animate = (time: number) => {
@@ -80,9 +81,9 @@
 			roughness: 0.2
 		});
 
-		grassColor = new THREE.Color(0x94bf30);
-		waterColor = new THREE.Color(0x25acf5);
-		mountainColor = new THREE.Color(0xa69a9c);
+		grassColour = new THREE.Color(0x94bf30);
+		waterColour = new THREE.Color(0x25acf5);
+		mountainColour = new THREE.Color(0xa69a9c);
 
 		// mesh loading
 		const loader = new GLTFLoader();
@@ -94,7 +95,7 @@
 			const vertexCount = tileMesh.geometry.attributes.position.count;
 			const indexCount = tileMesh.geometry.index?.count;
 
-			batchedMesh = new THREE.BatchedMesh(100_000, vertexCount, indexCount, tileMaterial);
+			batchedMesh = new THREE.BatchedMesh(0, vertexCount, indexCount, tileMaterial);
 			meshGeometryId = batchedMesh.addGeometry(tileMesh.geometry);
 			tileMeshLoaded = true;
 		});
@@ -162,6 +163,7 @@
 		};
 	});
 
+	// update orbit target when map dimensions change
 	$effect(() => {
 		if (orbit && mapDimensions) {
 			orbit.target.set((mapDimensions.x * tileSize) / 2, 0, (mapDimensions.y * tileSize) / 2);
@@ -169,9 +171,12 @@
 		}
 	});
 
+	// load map data when available
 	$effect(() => {
 		if (tileMeshLoaded && data) {
 			untrack(() => {
+				scene.remove(batchedMesh);
+
 				console.log(`Map data is ${data.byteLength} bytes`);
 				let dataView = new DataView(data);
 
@@ -190,6 +195,7 @@
 				}
 
 				console.log(`Loaded ${map.size} cells`);
+				batchedMesh.setInstanceCount(map.size);
 
 				for (const cell of map.values()) {
 					const worldPos = offsetToEvenQ({ q: cell.q, r: cell.r });
@@ -205,11 +211,11 @@
 					batchedMesh?.setMatrixAt(instanceId, matrix);
 
 					if (cell.height < 0.42) {
-						batchedMesh?.setColorAt(instanceId, waterColor);
+						batchedMesh?.setColorAt(instanceId, waterColour);
 					} else if (cell.height < 0.8) {
-						batchedMesh?.setColorAt(instanceId, grassColor);
+						batchedMesh?.setColorAt(instanceId, grassColour);
 					} else {
-						batchedMesh?.setColorAt(instanceId, mountainColor);
+						batchedMesh?.setColorAt(instanceId, mountainColour);
 					}
 				}
 
