@@ -2,7 +2,7 @@
 	import type { HexCell, StringCoords, Vector2 } from '$lib/shared/types';
 	import type { SvelteHTMLElements } from 'svelte/elements';
 	import { onMount, untrack } from 'svelte';
-	import { evenQToThreePos } from '$lib/shared/map';
+	import { deserializeMapBuffer, evenQToThreePos } from '$lib/shared/map';
 
 	import * as THREE from 'three';
 	import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -42,9 +42,9 @@
 	const tileOversizing = 4 / 3 - 0.0001; // remove gaps with 4/3 & prevent z-fighting with -0.0001
 	const zAxisScale = 0.866; // cos(30deg)  hexagons r weird
 
-	const seaLevel = 0.42;
-	const beachHeight = 0.04;
-	const mountainHeight = 0.8;
+	const seaLevel = 17;
+	const beachHeight = 1;
+	const mountainHeight = 32;
 
 	const waterShallowColour = new THREE.Color(0x25acf5);
 	const waterDeepColour = new THREE.Color(0x1c75bd);
@@ -236,7 +236,7 @@
 			normalDepthBuffer: depthDownsamplingPass.texture,
 			samples: 7,
 			rings: 4,
-			distanceThreshold: 0.01,
+			distanceThreshold: 0.02,
 			distanceFalloff: 0.005,
 			rangeThreshold: 0.0003,
 			rangeFalloff: 0.0001,
@@ -277,12 +277,10 @@
 				map.clear();
 
 				console.log(`Map data is ${data.byteLength} bytes`);
-				let dataView = new DataView(data);
 
-				let x = dataView.getFloat32(0);
-				let y = dataView.getFloat32(4);
+				const [cells, dimensions] = deserializeMapBuffer(data);
+				mapDimensions = dimensions;
 
-				mapDimensions = { x, y };
 				console.log(`Map dimensions: ${mapDimensions.x}, ${mapDimensions.y}`);
 
 				const mapCenter = new THREE.Vector3(mapDimensions.x, 0, mapDimensions.y / zAxisScale)
@@ -297,22 +295,18 @@
 				const sandLayer = mapLayers.find((l) => l.id === 'sand')!;
 				const mountainLayer = mapLayers.find((l) => l.id === 'mountain')!;
 
-				for (let offset = 8; offset < data.byteLength; offset += 12) {
-					const q = dataView.getFloat32(offset);
-					const r = dataView.getFloat32(offset + 4);
-					const height = dataView.getFloat32(offset + 8);
+				for (const cell of cells) {
+					map.set(`${cell.q},${cell.r}`, cell);
 
-					if (height < seaLevel) {
+					if (cell.height <= seaLevel) {
 						waterLayer.tileCount++;
-					} else if (height < seaLevel + beachHeight) {
+					} else if (cell.height <= seaLevel + beachHeight) {
 						sandLayer.tileCount++;
-					} else if (height > mountainHeight) {
-						mountainLayer.tileCount++;
-					} else {
+					} else if (cell.height < mountainHeight) {
 						grassLayer.tileCount++;
+					} else {
+						mountainLayer.tileCount++;
 					}
-
-					map.set(`${q},${r}`, { q, r, height });
 				}
 
 				console.log(`Loaded ${map.size} cells`);
@@ -333,17 +327,10 @@
 					// if (worldPos.x == 1 && worldPos.z == -0.5) cell.height = 5;
 					// if (worldPos.x == 0 && worldPos.z == 1) cell.height = 3;
 
-					let stylisedHeight = cell.height;
-					if (cell.height < seaLevel) {
-						stylisedHeight = seaLevel;
-					} else if (cell.height > mountainHeight) {
-						const excess = cell.height - mountainHeight;
-						stylisedHeight = mountainHeight + excess ** 0.5;
-					}
+					let stylisedHeight = Math.max(cell.height, seaLevel);
 
 					let layer: MapLayer;
-
-					if (cell.height < seaLevel) {
+					if (cell.height <= seaLevel) {
 						layer = waterLayer;
 
 						const depth = seaLevel - cell.height;
@@ -353,16 +340,16 @@
 							depthColourMap.set(depth, colour);
 						}
 						layer.mesh!.setColorAt(layer.instanceId, colour);
-					} else if (cell.height < seaLevel + beachHeight) {
+					} else if (cell.height <= seaLevel + beachHeight) {
 						layer = sandLayer;
-					} else if (cell.height > mountainHeight) {
-						layer = mountainLayer;
-					} else {
+					} else if (cell.height < mountainHeight) {
 						layer = grassLayer;
+					} else {
+						layer = mountainLayer;
 					}
 
 					const matrix = new THREE.Matrix4()
-						.makeScale(tileScale * tileOversizing, stylisedHeight * 50, tileScale * tileOversizing)
+						.makeScale(tileScale * tileOversizing, stylisedHeight * 2, tileScale * tileOversizing)
 						.setPosition(worldPos);
 					layer.mesh?.setMatrixAt(layer.instanceId, matrix);
 					layer.instanceId++;

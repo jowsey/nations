@@ -1,4 +1,4 @@
-import { integer, pgTable, primaryKey, real, varchar } from 'drizzle-orm/pg-core';
+import { integer, pgTable, primaryKey, varchar } from 'drizzle-orm/pg-core';
 
 export const players = pgTable('player', {
 	id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
@@ -10,7 +10,7 @@ export const mapCells = pgTable(
 	{
 		q: integer('q').notNull(),
 		r: integer('r').notNull(),
-		height: real('height').notNull()
+		height: integer('height').notNull()
 	},
 	(table) => [primaryKey({ columns: [table.q, table.r] })]
 );

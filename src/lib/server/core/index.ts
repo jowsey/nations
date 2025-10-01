@@ -56,14 +56,15 @@ class WorldMap {
 		}
 
 		// normalize to 0-1 & quantize to step
-		const quantizeStep = 0.025;
+		const quantizeStep = 0.025; // 0-40
 		const quantizeMult = 1 / quantizeStep;
 
 		const heightRange = highestHeight - lowestHeight;
+
 		this.cells.forEach((cell) => {
 			const scaledHeight = (cell.height - lowestHeight) / heightRange;
-			const quantizedHeight = Math.round(scaledHeight * quantizeMult) / quantizeMult;
-			cell.height = quantizedHeight;
+			const quantizedIntHeight = Math.round(scaledHeight * quantizeMult);
+			cell.height = quantizedIntHeight;
 		});
 	}
 
@@ -106,8 +107,9 @@ class WorldMap {
 }
 
 const map = new WorldMap();
-const cells = await db.select().from(mapCells).limit(1);
-if (cells.length === 0) {
+
+const force = false;
+if (force || (await db.select().from(mapCells).limit(1)).length === 0) {
 	map.regenerate({ x: 380, y: 220 }, 'gaming4');
 	await map.pushToDb();
 } else {
