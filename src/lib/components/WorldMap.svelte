@@ -13,8 +13,13 @@
 		RenderPass,
 		EffectPass,
 		SMAAEffect,
+		SSAOEffect,
+		NormalPass,
 		ToneMappingEffect,
-		ToneMappingMode
+		ToneMappingMode,
+		BlendFunction,
+		DepthDownsamplingPass,
+		EdgeDetectionMode
 	} from 'postprocessing';
 	import { browser } from '$app/environment';
 
@@ -158,9 +163,9 @@
 			powerPreference: 'high-performance',
 			canvas: mapCanvas,
 			alpha: true,
-			stencil: false, //
-			depth: false, // handled by postprocessing
-			antialias: false //
+			antialias: false, // postprocessing recommended defaults
+			stencil: false, // ^
+			depth: false // ^
 		});
 
 		const width = mapContainer.clientWidth;
@@ -208,14 +213,46 @@
 		orbit.update();
 
 		// effect composer
-		composer = new EffectComposer(renderer);
+		composer = new EffectComposer(renderer, {
+			frameBufferType: THREE.HalfFloatType
+		});
 
 		composer.addPass(new RenderPass(scene, camera));
-		// composer.addPass(new N8AOPostPass(scene, camera, width, height));
-		composer.addPass(new EffectPass(camera, new SMAAEffect()));
-		composer.addPass(
-			new EffectPass(camera, new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }))
-		);
+
+		const normalPass = new NormalPass(scene, camera);
+		composer.addPass(normalPass);
+
+		const depthDownsamplingPass = new DepthDownsamplingPass({
+			normalBuffer: normalPass.texture,
+			resolutionScale: 0.5
+		});
+		composer.addPass(depthDownsamplingPass);
+
+		// values copied + tweaked from https://github.com/pmndrs/postprocessing/blob/main/demo/src/demos/SSAODemo.js
+		const ssaoEffect = new SSAOEffect(camera, normalPass.texture, {
+			blendFunction: BlendFunction.MULTIPLY,
+			distanceScaling: true,
+			depthAwareUpsampling: true,
+			normalDepthBuffer: depthDownsamplingPass.texture,
+			samples: 7,
+			rings: 4,
+			distanceThreshold: 0.01,
+			distanceFalloff: 0.005,
+			rangeThreshold: 0.0003,
+			rangeFalloff: 0.0001,
+			luminanceInfluence: 0.7,
+			minRadiusScale: 0.33,
+			radius: 0.1,
+			intensity: 1.33,
+			bias: 0.025,
+			fade: 0.01,
+			resolutionScale: 0.5
+		});
+		const smaaEffect = new SMAAEffect({ edgeDetectionMode: EdgeDetectionMode.DEPTH });
+		const tonemappingEffect = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
+
+		const effectPass = new EffectPass(camera, ssaoEffect, smaaEffect, tonemappingEffect);
+		composer.addPass(effectPass);
 
 		return () => {
 			renderer.dispose();
