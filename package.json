@@ -13,10 +13,10 @@
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
 		"db:start": "docker compose up",
-		"db:push": "bun -b run drizzle-kit push",
-		"db:generate": "bun -b run drizzle-kit generate",
-		"db:migrate": "bun -b run drizzle-kit migrate",
-		"db:studio": "bun -b run drizzle-kit studio",
+		"db:push": "docker compose up -d && bun -b run drizzle-kit push",
+		"db:generate": "docker compose up -d && bun -b run drizzle-kit generate",
+		"db:migrate": "docker compose up -d && bun -b run drizzle-kit migrate",
+		"db:studio": "docker compose up -d && bun -b run drizzle-kit studio",
 		"better-auth:generate": "bunx -b @better-auth/cli generate --output=src/lib/server/db/schema/better-auth.ts"
 	},
 	"devDependencies": {
@@ -34,6 +34,7 @@
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.12.4",
 		"globals": "^16.4.0",
+		"postprocessing": "^6.37.8",
 		"prettier": "^3.6.2",
 		"prettier-plugin-svelte": "^3.4.0",
 		"prettier-plugin-tailwindcss": "^0.6.14",

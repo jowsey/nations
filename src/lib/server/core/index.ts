@@ -3,7 +3,7 @@ import { createNoise2D } from 'simplex-noise';
 import { db } from '../db';
 import { mapCells } from '../db/schema';
 import type { CellPosition, HexCell, StringCoords, Vector2 } from '$lib/shared/types';
-import { offsetToEvenQ } from '$lib/shared/map';
+import { evenQToXY } from '$lib/shared/map';
 
 // Generate fractal noise
 const fractal = (
@@ -42,10 +42,10 @@ class WorldMap {
 		let lowestHeight = Infinity;
 		let highestHeight = -Infinity;
 
-		for (let q = 0; q <= dimensions.x; q++) {
-			for (let r = 0; r <= dimensions.y; r++) {
+		for (let q = 0; q < dimensions.x; q++) {
+			for (let r = 0; r < dimensions.y; r++) {
 				const axialPos = { q, r };
-				const offsetPos = offsetToEvenQ(axialPos);
+				const offsetPos = evenQToXY(axialPos);
 				const height = fractal(noise, { x: offsetPos.x / 50, y: offsetPos.y / 50 }, 5) * 0.5 + 0.5;
 
 				this.cells.set(`${q},${r}`, { q, r, height });
@@ -55,10 +55,15 @@ class WorldMap {
 			}
 		}
 
-		// normalize
+		// normalize to 0-1 & quantize to step
+		const quantizeStep = 0.025;
+		const quantizeMult = 1 / quantizeStep;
+
 		const heightRange = highestHeight - lowestHeight;
 		this.cells.forEach((cell) => {
-			cell.height = (cell.height - lowestHeight) / heightRange;
+			const scaledHeight = (cell.height - lowestHeight) / heightRange;
+			const quantizedHeight = Math.round(scaledHeight * quantizeMult) / quantizeMult;
+			cell.height = quantizedHeight;
 		});
 	}
 
@@ -68,9 +73,16 @@ class WorldMap {
 		await db.transaction(async (tx) => {
 			await tx.delete(mapCells);
 			const values = Array.from(this.cells.values());
-			values.forEach(async (cell) => {
-				await tx.insert(mapCells).values(cell);
-			});
+
+			const batchPromises = [];
+
+			const batchSize = 1_000;
+			for (let i = 0; i < values.length; i += batchSize) {
+				const batch = values.slice(i, i + batchSize);
+				batchPromises.push(tx.insert(mapCells).values(batch));
+			}
+
+			await Promise.all(batchPromises);
 		});
 
 		console.log('^ Done.');
@@ -94,6 +106,10 @@ class WorldMap {
 }
 
 const map = new WorldMap();
-// await map.pullFromDb();
-await map.regenerate({ x: 200, y: 120 }, 'gaming5');
-await map.pushToDb();
+const cells = await db.select().from(mapCells).limit(1);
+if (cells.length === 0) {
+	map.regenerate({ x: 380, y: 220 }, 'gaming4');
+	await map.pushToDb();
+} else {
+	await map.pullFromDb();
+}
