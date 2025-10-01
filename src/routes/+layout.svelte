@@ -49,7 +49,7 @@
 					<a
 						transition:fly={{ duration: 100, x: -20 }}
 						href={resolve('/')}
-						class="text-shadow-950 font-bold text-cream text-shadow-sm"
+						class="font-bold text-cream text-shadow-neutral-950 text-shadow-xs"
 					>
 						← Back
 					</a>
