@@ -31,10 +31,13 @@
 	{#if !data.session}
 		<div class="flex size-full flex-col items-center justify-center">
 			<p class="text-3xl font-bold">Nations</p>
-			<p class="mb-4">Log in to start playing.</p>
+			<p class="mb-4">Sign in to start playing.</p>
 
-			<StyledButton onclick={() => authClient.signIn.social({ provider: 'discord' })}>
-				Sign in with Discord
+			<StyledButton
+				class="bg-[#5865F2]!"
+				onclick={() => authClient.signIn.social({ provider: 'discord' })}
+			>
+				Sign in with <b>Discord</b>
 			</StyledButton>
 		</div>
 	{:else}

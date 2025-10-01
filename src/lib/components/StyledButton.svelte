@@ -7,7 +7,7 @@
 <button
 	{...attribs}
 	class={[
-		'rounded-smooth cursor-pointer rounded-full bg-neutral-950 px-4 py-1 text-neutral-50 hover:bg-neutral-900',
+		'rounded-smooth cursor-pointer rounded-full bg-grass px-4 py-1 text-neutral-50 hover:brightness-105',
 		attribs.class
 	]}
 >
