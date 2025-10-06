@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:17 # 18 doesn't work with drizzle-kit yet (@0.31.5)
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_DB=nations
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
