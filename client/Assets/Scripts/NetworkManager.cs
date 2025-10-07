@@ -1,38 +1,79 @@
-using System.Collections;
+using System.Collections.Generic;
+using MikeSchweitzer.WebSocket;
+using Newtonsoft.Json;
 using UnityEngine;
-using UnityEngine.Networking;
 
+public record InboundMessage
+{
+    public string Type;
+    public object Data;
+}
+
+public record NewUserData
+{
+    public string Id;
+    public string Token;
+}
 
 public class NetworkManager : MonoBehaviour
 {
-    private record SignInResponse
+    public string ServerURL = "ws://localhost:3000/ws";
+    [SerializeField] private WebSocketConnection _socket;
+
+    [SerializeField] private bool _clearPrefs;
+
+    private const string IdPrefKey = "userid";
+    private const string TokenPrefKey = "token";
+
+    private void OnValidate()
     {
-        public string url;
-        public bool redirect;
+        if (_socket == null) _socket = GetComponent<WebSocketConnection>();
     }
 
-    public string ServerURL = "http://localhost:3000";
-
-    public IEnumerator AttemptSignIn()
+    private void Start()
     {
-        // launch http server on 47105
-        
-        Application.OpenURL(ServerURL + "/api/auth/sign-in/discord");
-        yield return null;
-     
-        // const string data = "{ \"provider\": \"discord\" }";
-        // var request = UnityWebRequest.Post(ServerURL + "/api/auth/sign-in/social", data, "application/json");
-        // yield return request.SendWebRequest();
-        //
-        // if (request.result != UnityWebRequest.Result.Success)
-        // {
-        //     Debug.LogError("Error: " + request.error);
-        //     yield break;
-        // }
-        //
-        // Debug.Log("Response: " + request.downloadHandler.text);
-        //
-        // var response = JsonUtility.FromJson<SignInResponse>(request.downloadHandler.text);
-        // Application.OpenURL(response.url);
+        if (_clearPrefs)
+        {
+            PlayerPrefs.DeleteKey(IdPrefKey);
+            PlayerPrefs.DeleteKey(TokenPrefKey);
+        }
+
+        _socket.DesiredConfig = new WebSocketConfig
+        {
+            Url = ServerURL,
+            DotNetHeaders = new Dictionary<string, string>
+            {
+                ["id"] = PlayerPrefs.GetString(IdPrefKey),
+                ["token"] = PlayerPrefs.GetString(TokenPrefKey)
+            }
+        };
+
+        _socket.MessageReceived += OnMessageReceived;
+        _socket.Connect();
+    }
+
+    private void OnMessageReceived(WebSocketConnection connection, WebSocketMessage message)
+    {
+        Debug.Log($"Message received: {message}");
+
+        var data = JsonConvert.DeserializeObject<InboundMessage>(message.String);
+        Debug.Log($"Message type: {data.Type}");
+
+        switch (data.Type)
+        {
+            case "newUser":
+            {
+                Debug.Log("New user data: " + data.Data);
+                var userData = JsonConvert.DeserializeObject<NewUserData>(data.Data.ToString());
+                PlayerPrefs.SetString(IdPrefKey, userData.Id);
+                PlayerPrefs.SetString(TokenPrefKey, userData.Token);
+                break;
+            }
+            default:
+            {
+                Debug.Log("Unknown message type: " + data.Type);
+                break;
+            }
+        }
     }
 }

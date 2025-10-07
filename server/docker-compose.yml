@@ -1,3 +1,4 @@
+name: nations-server
 services:
   db:
     image: postgres:17 # 18 doesn't work with drizzle-kit yet (@0.31.5)
