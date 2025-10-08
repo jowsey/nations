@@ -1,83 +1,125 @@
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import { users } from "./db/schema";
+import { mapCells, tokens, users } from "./db/schema";
 import { nanoid } from "nanoid";
+import { WorldMap } from "./map";
 
 interface WebsocketData {
   userId: string;
 }
 
-interface NewUserMessage {
-  type: "newUser";
-  data: {
-    id: string;
-    token: string;
-  };
-}
+// Returns a user's id from their token or empty if invalid
+const auth = async (token: string): Promise<string> => {
+  if (!token) return ""; // no token provided
 
-type OutboundMessage = NewUserMessage;
+  const identifier = token.split(".")[0];
+  const verifier = token.split(".")[1];
 
-type AuthResult = "success" | "fail" | "create";
+  if (!identifier || !verifier) return ""; // malformed token
 
-const auth = async (id: string, token: string): Promise<AuthResult> => {
-  if (!id) return "create"; // no id
-  if (!token) return "fail"; // id but no token
+  const foundToken = await db
+    .select()
+    .from(tokens)
+    .where(eq(tokens.identifier, identifier))
+    .limit(1);
+  if (!foundToken[0]) return ""; // token identifier doesn't exist in db
 
-  const user = await db.select().from(users).where(eq(users.id, id));
-  if (!user[0]) return "fail"; // no user in db
-  if (!user[0].token) return "fail"; // user has no token in db
-
-  if (!(await Bun.password.verify(token, user[0].token))) {
-    return "fail"; // tokens don't match
+  if (!(await Bun.password.verify(verifier, foundToken[0].hash))) {
+    return ""; // tokens don't match
   }
 
-  return "success"; // all good!
+  const user = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, foundToken[0].userId))
+    .limit(1);
+  if (!user[0]) return ""; // user doesn't exist (should be impossible from cascade)
+
+  return user[0].id; // all good!
 };
 
+if (!process.env.PORT) {
+  throw new Error("PORT not set in environment!");
+}
+
+const map = new WorldMap();
+
+const forceRegenerate = false;
+if (forceRegenerate || (await db.select().from(mapCells).limit(1)).length === 0) {
+  map.regenerate({ x: 4, y: 3 }, "gaming4");
+  await map.pushToDb();
+} else {
+  await map.pullFromDb();
+}
+
 const server = Bun.serve<WebsocketData, object>({
-  port: 3000,
+  port: parseInt(process.env.PORT),
   async fetch(req, server) {
     const url = new URL(req.url);
-    if (url.pathname === "/ws") {
-      const id = req.headers.get("id") || "";
-      const token = req.headers.get("token") || "";
+    switch (url.pathname) {
+      case "/api/map": {
+        const id = await auth(req.headers.get("token") || "");
+        if (!id) return new Response("Unauthorized", { status: 401 });
 
-      const authResult = await auth(id, token);
+        // todo check if map is dirty before building a new buffer
+        const [cells, dimensions] = map.getCells();
 
-      if (authResult === "fail") {
-        return new Response("Unauthorized", { status: 401 });
+        const stride = 1; // uint8 height
+        const buffer = new ArrayBuffer(2 + 2 + cells.length * stride);
+        const view = new DataView(buffer);
+
+        view.setUint16(0, dimensions.x, true);
+        view.setUint16(2, dimensions.y, true);
+
+        let offset = 4;
+        cells.forEach((cell) => {
+          view.setUint8(offset, cell.height);
+          offset += 1;
+        });
+
+        return new Response(buffer, {
+          status: 200,
+          headers: { "Content-Type": "application/octet-stream" },
+        });
       }
+      case "/api/new-user": {
+        const user = await db.insert(users).values({}).returning({ id: users.id });
+        if (!user[0]) return new Response("Error creating user", { status: 500 }); // god knows how
 
-      return server.upgrade(req, { data: { userId: id } })
-        ? new Response("Upgrade successful", { status: 101 })
-        : new Response("Upgrade failed", { status: 400 });
+        const identifier = nanoid(16);
+        const verifier = nanoid(32);
+        const token = `${identifier}.${verifier}`;
+
+        await db
+          .insert(tokens)
+          .values({ identifier, hash: await Bun.password.hash(verifier), userId: user[0].id });
+
+        console.log(`New token generated: ${token}`);
+        return new Response(token);
+      }
+      case "/ws": {
+        const id = await auth(req.headers.get("token") || "");
+        if (!id) return new Response("Unauthorized", { status: 401 });
+
+        return server.upgrade(req, { data: { userId: id } })
+          ? new Response("Upgrade successful", { status: 101 })
+          : new Response("Upgrade failed", { status: 400 });
+      }
+      default: {
+        // 🤷
+      }
     }
-
-    return new Response("OK", { status: 200 });
   },
   websocket: {
     async open(ws) {
-      console.log(`New websocket client @ ${ws.remoteAddress}`);
+      console.log(`New websocket client (${ws.remoteAddress})`);
       console.log(ws.data);
-
-      // create new user
-      if (!ws.data.userId) {
-        const token = nanoid(24);
-        const user = await db
-          .insert(users)
-          .values({ token: await Bun.password.hash(token) })
-          .returning();
-
-        ws.send(
-          JSON.stringify({ type: "newUser", data: { id: user[0]!.id, token } } as OutboundMessage),
-        );
-      }
     },
     async message(ws, message) {
       console.log(`ws message: ${message}`);
     },
     async close(ws, code, reason) {
-      console.log(`ws closed: ${code} - ${reason}`);
+      console.log(`ws closed: code ${code} ("${reason}")`);
     },
   },
 });

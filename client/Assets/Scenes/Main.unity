@@ -565,9 +565,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 19c6369ce90a42fead3aa6bf38aa494d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkManager
-  ServerURL: ws://localhost:3000/ws
+  <SocketUrl>k__BackingField: ws://localhost:3000/ws
+  <ApiUrl>k__BackingField: http://localhost:3000/api
   _socket: {fileID: 1071297492}
   _clearPrefs: 0
+  <State>k__BackingField:
+    Token: 
+    MapPulled: 0
+  OnMapDataReceived:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!114 &1071297492
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -960,6 +967,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1569913770}
   - component: {fileID: 1569913769}
+  - component: {fileID: 1569913771}
   m_Layer: 0
   m_Name: MapGrid
   m_TagString: Untagged
@@ -996,6 +1004,22 @@ Transform:
   - {fileID: 1206673586}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1569913771
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1569913768}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c506e57fa976b40c0881ee5164fb9f11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MapManager
+  _baseLayer: {fileID: 1814023471}
+  _detailsLayer: {fileID: 1206673588}
+  _grassTile: {fileID: 11400000, guid: b586e79e41e3e46a9854c2a4afc1cb01, type: 2}
+  Dimensions: {x: 0, y: 0}
 --- !u!1 &1814023468
 GameObject:
   m_ObjectHideFlags: 0
