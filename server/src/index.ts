@@ -34,7 +34,7 @@ const auth = async (id: string, token: string): Promise<AuthResult> => {
   return "success"; // all good!
 };
 
-const server = Bun.serve<WebsocketData, {}>({
+const server = Bun.serve<WebsocketData, object>({
   port: 3000,
   async fetch(req, server) {
     const url = new URL(req.url);
@@ -73,8 +73,12 @@ const server = Bun.serve<WebsocketData, {}>({
         );
       }
     },
-    async message(ws, message) {},
-    async close(ws, code, reason) {},
+    async message(ws, message) {
+      console.log(`ws message: ${message}`);
+    },
+    async close(ws, code, reason) {
+      console.log(`ws closed: ${code} - ${reason}`);
+    },
   },
 });
 
