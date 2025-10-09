@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import { mapCells, tokens, users } from "./db/schema";
+import { mapCells, users } from "./db/schema";
 import { nanoid } from "nanoid";
 import { WorldMap } from "./map";
 
@@ -17,25 +17,18 @@ const auth = async (token: string): Promise<string> => {
 
   if (!identifier || !verifier) return ""; // malformed token
 
-  const foundToken = await db
-    .select()
-    .from(tokens)
-    .where(eq(tokens.identifier, identifier))
+  const foundUser = await db
+    .select({ id: users.id, tokenIdentifier: users.tokenIdentifier, tokenHash: users.tokenHash })
+    .from(users)
+    .where(eq(users.tokenIdentifier, identifier))
     .limit(1);
-  if (!foundToken[0]) return ""; // token identifier doesn't exist in db
+  if (!foundUser[0]) return ""; // token identifier doesn't exist in db
 
-  if (!(await Bun.password.verify(verifier, foundToken[0].hash))) {
+  if (!(await Bun.password.verify(verifier, foundUser[0].tokenHash))) {
     return ""; // tokens don't match
   }
 
-  const user = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.id, foundToken[0].userId))
-    .limit(1);
-  if (!user[0]) return ""; // user doesn't exist (should be impossible from cascade)
-
-  return user[0].id; // all good!
+  return foundUser[0].id; // all good!
 };
 
 if (!process.env.PORT) {
@@ -83,16 +76,13 @@ const server = Bun.serve<WebsocketData, object>({
         });
       }
       case "/api/new-user": {
-        const user = await db.insert(users).values({}).returning({ id: users.id });
-        if (!user[0]) return new Response("Error creating user", { status: 500 }); // god knows how
-
         const identifier = nanoid(16);
         const verifier = nanoid(32);
         const token = `${identifier}.${verifier}`;
 
         await db
-          .insert(tokens)
-          .values({ identifier, hash: await Bun.password.hash(verifier), userId: user[0].id });
+          .insert(users)
+          .values({ tokenIdentifier: identifier, tokenHash: await Bun.password.hash(verifier) });
 
         console.log(`New token generated: ${token}`);
         return new Response(token);

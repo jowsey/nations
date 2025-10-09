@@ -2,15 +2,8 @@ import { bigint, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "dr
 
 export const users = pgTable("user", {
   id: uuid("id").primaryKey().defaultRandom(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export const tokens = pgTable("token", {
-  identifier: text("identifier").primaryKey(),
-  hash: text("hash").notNull(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
+  tokenIdentifier: text("token_identifier").notNull().unique(),
+  tokenHash: text("token_hash").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
