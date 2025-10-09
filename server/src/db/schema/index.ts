@@ -1,4 +1,4 @@
-import { bigint, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { smallint, integer, pgTable, text, timestamp, uuid, primaryKey } from "drizzle-orm/pg-core";
 
 export const users = pgTable("user", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -7,15 +7,20 @@ export const users = pgTable("user", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const mapMetadata = pgTable("map_metadata", {
+  id: integer("id").primaryKey().default(0),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  seed: text("seed").notNull(),
+  generatedAt: timestamp("generated_at").notNull().defaultNow(),
+});
+
 export const mapCells = pgTable(
   "map_cell",
   {
-    // worth noting that id indirectly controls max map size, sqrt(max_id) = max width/height
-    // number mode limits us to 2^53 which means sqrt(2^53) = ~94m max. probably fine :p
-    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
     q: integer("q").notNull(),
     r: integer("r").notNull(),
-    height: integer("height").notNull(),
+    details: smallint("details").notNull(),
   },
-  (table) => [uniqueIndex("map_cell_qr_idx").on(table.q, table.r)],
+  (table) => [primaryKey({ columns: [table.q, table.r] })],
 );

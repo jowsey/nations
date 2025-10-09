@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Cysharp.Threading.Tasks;
 using JetBrains.Annotations;
+using Map;
 using MikeSchweitzer.WebSocket;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -21,13 +21,6 @@ public class NetworkManager : MonoBehaviour
     public class SocketState
     {
         [CanBeNull] public string Token;
-    }
-
-    public class MapCell
-    {
-        public uint Q;
-        public uint R;
-        public uint Height;
     }
 
     private const string TokenPrefKey = "token";
@@ -161,19 +154,19 @@ public class NetworkManager : MonoBehaviour
 
         var cells = new List<MapCell>(dimensions.x * dimensions.y);
 
-        const int stride = 1;
+        const int stride = 2;
         var cellI = 0;
         for (var i = 4; i < data.Length; i += stride)
         {
-            var q = (uint)(cellI % dimensions.x);
-            var r = (uint)(cellI / dimensions.x);
-            var height = data[i];
+            var q = cellI % dimensions.x;
+            var r = cellI / dimensions.x;
+            var details = BitConverter.ToUInt16(data, i);
 
             cells.Add(new MapCell
             {
                 Q = q,
                 R = r,
-                Height = height
+                Details = details,
             });
 
             cellI++;

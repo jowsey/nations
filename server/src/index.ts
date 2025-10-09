@@ -39,7 +39,7 @@ const map = new WorldMap();
 
 const forceRegenerate = false;
 if (forceRegenerate || (await db.select().from(mapCells).limit(1)).length === 0) {
-  map.regenerate({ x: 4, y: 3 }, "gaming4");
+  await map.regenerate({ x: 512, y: 384 }, "gaming4");
   await map.pushToDb();
 } else {
   await map.pullFromDb();
@@ -57,7 +57,7 @@ const server = Bun.serve<WebsocketData, object>({
         // todo check if map is dirty before building a new buffer
         const [cells, dimensions] = map.getCells();
 
-        const stride = 1; // uint8 height
+        const stride = 2; // uint16 details
         const buffer = new ArrayBuffer(2 + 2 + cells.length * stride);
         const view = new DataView(buffer);
 
@@ -66,9 +66,11 @@ const server = Bun.serve<WebsocketData, object>({
 
         let offset = 4;
         cells.forEach((cell) => {
-          view.setUint8(offset, cell.height);
-          offset += 1;
+          view.setUint16(offset, cell.details, true);
+          offset += 2;
         });
+
+        console.log(buffer.byteLength, "bytes sent");
 
         return new Response(buffer, {
           status: 200,
