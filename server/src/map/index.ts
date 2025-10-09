@@ -31,9 +31,10 @@ export interface Vector2 {
   y: number;
 }
 
-// even-q coordinates to 2D space
-export const evenQToXY = (cell: CellPosition): Vector2 => {
-  return { x: cell.q, y: cell.r + (cell.q & 1) / 2 };
+// Convert offset coordinates to pointy-top/odd-q world-space
+export const offsetToWorldSpace = (cell: CellPosition): Vector2 => {
+  // return { x: cell.q, y: cell.r + (cell.q & 1) / 2 };
+  return { x: cell.q + (cell.r & 1) / 2, y: cell.r };
 };
 
 export const qrToIndex = (cell: CellPosition, mapWidth: number): number => {
@@ -93,11 +94,11 @@ export class WorldMap {
 
     const longGrassChance = 0.15;
 
-    for (let q = 0; q < dimensions.x; q++) {
-      for (let r = 0; r < dimensions.y; r++) {
-        const axialPos = { q, r };
-        const offsetPos = evenQToXY(axialPos);
-        const height = fractal(noise, { x: offsetPos.x, y: offsetPos.y }, frequency);
+    for (let r = 0; r < dimensions.y; r++) {
+      for (let q = 0; q < dimensions.x; q++) {
+        const coords = { q, r };
+        const worldPos = offsetToWorldSpace(coords);
+        const height = fractal(noise, { x: worldPos.x, y: worldPos.y }, frequency);
 
         let details: number = 0b0000_0000_0000_0000;
         if (height <= seaLevel) {
@@ -109,7 +110,7 @@ export class WorldMap {
         } else {
           const forestHeight = fractal(
             noise,
-            { x: offsetPos.x + 4000, y: offsetPos.y + 4000 },
+            { x: worldPos.x + 4000, y: worldPos.y + 4000 },
             forestFreq,
           );
 
@@ -118,13 +119,13 @@ export class WorldMap {
           } else {
             details |= 0 << 12; // grass
 
-            if (Math.random() < longGrassChance) {
+            if (prng() < longGrassChance) {
               details |= 1 << 8; // tall grass cosmetic
             }
           }
         }
 
-        this.cells[qrToIndex(axialPos, dimensions.x)] = { q, r, details };
+        this.cells[qrToIndex(coords, dimensions.x)] = { q, r, details };
       }
     }
   }
