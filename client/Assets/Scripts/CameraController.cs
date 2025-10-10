@@ -43,6 +43,12 @@ public class CameraController : MonoBehaviour
         transform.position = Vector3.Lerp(transform.position, _targetPosition, Time.deltaTime * _panLerpSpeed);
 
         // Zoom
+        // Scroll is a delta, but gamepad uses a constant value
+        if (_zoomAction.activeControl?.device is Gamepad)
+        {
+            zoomInput *= Time.deltaTime;
+        }
+
         _targetZoom = Mathf.Clamp(_targetZoom + zoomInput * _zoomSpeed * zoomFactor, _minZoom, _maxZoom);
         _camera.orthographicSize = Mathf.Lerp(_camera.orthographicSize, _targetZoom, Time.deltaTime * _zoomLerpSpeed);
     }

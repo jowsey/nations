@@ -375,7 +375,7 @@ MonoBehaviour:
   _panLerpSpeed: 10
   _zoomSpeed: 1.6
   _minZoom: 4
-  _maxZoom: 144
+  _maxZoom: 192
   _zoomLerpSpeed: 10
 --- !u!1 &619394800
 GameObject:
