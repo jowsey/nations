@@ -23,19 +23,24 @@ public class MapManager : MonoBehaviour
         NetworkManager.Instance.OnMapDataReceived.AddListener(OnMapDataReceived);
     }
 
-    private void OnMapDataReceived(List<MapCell> mapCells, Vector2Int dimensions)
+    private void OnMapDataReceived(MapCell[] mapCells, Vector2Int dimensions)
     {
         Dimensions = dimensions;
 
         _baseLayer.ClearAllTiles();
         _detailsLayer.ClearAllTiles();
 
-        foreach (var cell in mapCells)
-        {
-            var position = new Vector3Int(cell.Q, cell.R, 0);
-            var biome = cell.Biome;
+        var baseTiles = new TileBase[mapCells.Length];
+        var detailTiles = new TileBase[mapCells.Length];
 
-            var baseTile = biome switch
+        for (var i = 0; i < mapCells.Length; i++)
+        {
+            var cell = mapCells[i];
+
+            var biome = cell.Biome;
+            var cosmetic = cell.Cosmetic;
+
+            baseTiles[i] = biome switch
             {
                 CellBiome.Grass => _grassTile,
                 CellBiome.Water => _waterTile,
@@ -45,8 +50,7 @@ public class MapManager : MonoBehaviour
                 _ => null
             };
 
-            var cosmetic = cell.Cosmetic;
-            var detailTile = biome switch
+            detailTiles[i] = biome switch
             {
                 CellBiome.Grass => cosmetic switch
                 {
@@ -55,9 +59,10 @@ public class MapManager : MonoBehaviour
                 },
                 _ => null
             };
-
-            _baseLayer.SetTile(position, baseTile);
-            _detailsLayer.SetTile(position, detailTile);
         }
+
+        var bounds = new BoundsInt(0, 0, 0, Dimensions.x, Dimensions.y, 1);
+        _baseLayer.SetTilesBlock(bounds, baseTiles);
+        _detailsLayer.SetTilesBlock(bounds, detailTiles);
     }
 }

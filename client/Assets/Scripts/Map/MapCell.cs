@@ -1,6 +1,5 @@
 namespace Map
 {
-    // See spec.md
     public enum CellBiome : byte
     {
         Grass = 0,
@@ -10,15 +9,9 @@ namespace Map
         Mountain = 4
     }
 
-    public class MapCell
+    public struct MapCell
     {
-        // Column
-        public int Q;
-
-        // Row
-        public int R;
-
-        // 2 byte bitfield, see spec.md
+        // 2 byte bitfield, see HexCell type in server
         public ushort Details;
 
         // Highest 4 bits

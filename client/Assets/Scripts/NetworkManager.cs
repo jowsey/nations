@@ -34,7 +34,7 @@ public class NetworkManager : MonoBehaviour
 
     [field: SerializeField] public SocketState State { get; private set; } = new();
 
-    public UnityEvent<List<MapCell>, Vector2Int> OnMapDataReceived = new();
+    public UnityEvent<MapCell[], Vector2Int> OnMapDataReceived = new();
 
     private void OnValidate()
     {
@@ -142,34 +142,27 @@ public class NetworkManager : MonoBehaviour
 
         var mapData = ParseMapData(mapReq.downloadHandler.data);
         OnMapDataReceived.Invoke(mapData.cells, mapData.dimensions);
-        Debug.Log($"Map data received: {mapData.dimensions.x}x{mapData.dimensions.y}, {mapData.cells.Count} cells");
+        Debug.Log($"Map data received: {mapData.dimensions.x}x{mapData.dimensions.y}, {mapData.cells.Length} cells");
     }
 
-    private (List<MapCell> cells, Vector2Int dimensions) ParseMapData(byte[] data)
+    private static (MapCell[] cells, Vector2Int dimensions) ParseMapData(byte[] data)
     {
         var dimensions = new Vector2Int(
             BitConverter.ToUInt16(data, 0),
             BitConverter.ToUInt16(data, 2)
         );
 
-        var cells = new List<MapCell>(dimensions.x * dimensions.y);
+        var cellCount = dimensions.x * dimensions.y;
+        var cells = new MapCell[cellCount];
 
         const int stride = 2;
-        var cellI = 0;
-        for (var i = 4; i < data.Length; i += stride)
+        for (var i = 0; i < cellCount; i++)
         {
-            var q = cellI % dimensions.x;
-            var r = cellI / dimensions.x;
-            var details = BitConverter.ToUInt16(data, i);
-
-            cells.Add(new MapCell
+            var offset = 4 + (i * stride);
+            cells[i] = new MapCell
             {
-                Q = q,
-                R = r,
-                Details = details,
-            });
-
-            cellI++;
+                Details = BitConverter.ToUInt16(data, offset),
+            };
         }
 
         return (cells, dimensions);
