@@ -2,6 +2,9 @@ import alea from "alea";
 import { createNoise2D } from "simplex-noise";
 import { db } from "../db";
 import { mapCells, mapMetadata } from "../db/schema";
+import { from as copyFrom } from "pg-copy-streams";
+import { Readable, pipeline } from "node:stream";
+// import { pipeline } from "node:stream/promises"; // todo
 
 export interface CellPosition {
   // Column
@@ -133,29 +136,29 @@ export class WorldMap {
   public async pushToDb() {
     console.write("Pushing map to db... ");
 
-    await db.transaction(async (tx) => {
-      await tx.delete(mapMetadata);
-      await tx.insert(mapMetadata).values({
-        width: this.dimensions.x,
-        height: this.dimensions.y,
-        seed: this.seed,
-      });
-
-      await tx.delete(mapCells);
-
-      const cells = [...this.cells];
-
-      // auto-batch inserts
-      // todo, use copy from stdin instead
-      const maxParams = 32767; // postgres limit
-      const paramsPerRow = Object.keys(cells[0]!).length;
-      const cellsPerBatch = Math.floor(maxParams / paramsPerRow);
-
-      for (let i = 0; i < cells.length; i += cellsPerBatch) {
-        const batch = cells.slice(i, i + cellsPerBatch);
-        await tx.insert(mapCells).values(batch);
-      }
+    await db.delete(mapMetadata);
+    await db.insert(mapMetadata).values({
+      width: this.dimensions.x,
+      height: this.dimensions.y,
+      seed: this.seed,
     });
+
+    await db.delete(mapCells);
+
+    const cells = [...this.cells];
+
+    const ingestStream = db.$client.query(copyFrom("COPY map_cell FROM STDIN"));
+    // todo is this best way of doing this?
+    const sourceStream = new Readable({
+      read() {
+        for (const c of cells) {
+          this.push(`${c.q}\t${c.r}\t${c.details}\n`);
+        }
+        this.push(null);
+      },
+    });
+    // async pipeline throws a TypeError(?), todo investigate
+    pipeline(sourceStream, ingestStream, () => {});
 
     console.log("Done.");
   }
