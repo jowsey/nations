@@ -70,7 +70,7 @@ const server = Bun.serve<WebsocketData, object>({
           offset += 2;
         });
 
-        console.log(buffer.byteLength, "bytes sent");
+        console.log(`${buffer.byteLength} bytes sent`);
 
         return new Response(buffer, {
           status: 200,
