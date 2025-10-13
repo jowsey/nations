@@ -45,7 +45,7 @@ if (forceRegenerate || (await db.select().from(mapCells).limit(1)).length === 0)
   await map.pullFromDb();
 }
 
-const server = Bun.serve<WebsocketData, object>({
+const server = Bun.serve({
   port: parseInt(process.env.PORT),
   async fetch(req, server) {
     const url = new URL(req.url);
@@ -103,6 +103,7 @@ const server = Bun.serve<WebsocketData, object>({
     }
   },
   websocket: {
+    data: {} as WebsocketData,
     async open(ws) {
       console.log(`New websocket client (${ws.remoteAddress})`);
       console.log(ws.data);
