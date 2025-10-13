@@ -1,5 +1,5 @@
 import alea from "alea";
-import { createNoise2D } from "simplex-noise";
+import { createNoise4D } from "simplex-noise";
 import { db } from "../db";
 import { mapCells, mapMetadata } from "../db/schema";
 import { from as copyFrom } from "pg-copy-streams";
@@ -50,22 +50,42 @@ export const indexToQR = (index: number, mapWidth: number): CellPosition => {
   return { q, r };
 };
 
-// Generate fractal noise between 0-1
-const fractal = (
-  noiseFn: (x: number, y: number) => number,
+// Generate tiled noise
+const genTiledNoise = (
+  noiseFn: (x: number, y: number, z: number, w: number) => number,
   position: Vector2,
+  dimensions: Vector2,
   frequency: number = 1,
   octaves: number = 5,
 ) => {
+  const persistence = 0.6;
+  const lacunarity = 2.0;
+
   let total = 0;
   let amplitude = 1;
   let maxValue = 0;
 
+  const radiusX = dimensions.x / (2 * Math.PI);
+  const radiusY = dimensions.y / (2 * Math.PI);
+
+  const angleX = 2 * Math.PI * (position.x / dimensions.x);
+  const angleY = 2 * Math.PI * (position.y / dimensions.y);
+
   for (let i = 0; i < octaves; i++) {
-    total += noiseFn(position.x * frequency, position.y * frequency) * amplitude;
+    const octaveRadiusX = radiusX * frequency;
+    const octaveRadiusY = radiusY * frequency;
+
+    total +=
+      noiseFn(
+        octaveRadiusX * Math.cos(angleX),
+        octaveRadiusX * Math.sin(angleX),
+        octaveRadiusY * Math.cos(angleY),
+        octaveRadiusY * Math.sin(angleY),
+      ) * amplitude;
+
     maxValue += amplitude;
-    amplitude *= 0.5;
-    frequency *= 2;
+    amplitude *= persistence;
+    frequency *= lacunarity;
   }
 
   return (total / maxValue) * 0.5 + 0.5; // normalize to 0-1
@@ -78,59 +98,86 @@ export class WorldMap {
 
   // Generate a new map
   public async regenerate(dimensions: Vector2, seed: string) {
+    console.write("Generating new map... ");
     this.dimensions = dimensions;
     this.seed = seed;
 
     const prng = alea(seed);
-    const noise = createNoise2D(prng);
+    const noise4d = createNoise4D(prng);
     this.cells = new Array(dimensions.x * dimensions.y);
 
-    const frequency = 1 / 150;
+    const octaves = 12;
+    const frequency = 1 / 600;
 
     // todo create reusable biome layer type with freq/threshold/etc
-    const forestFreq = 1 / 80;
-    const forestThreshold = 0.75;
+    const forestFreq = 1 / 100;
+    const forestThreshold = 0.65;
 
-    const seaLevel = 0.37;
-    const beachHeight = 0.035;
-    const mountainHeight = 0.8;
+    const seaLevel = 0.44;
+    const beachHeight = 0.01;
+    const mountainHeight = 0.84;
 
     const longGrassChance = 0.15;
+
+    const heights = new Array(dimensions.x * dimensions.y);
+
+    // pre-generate everything so we can normalise it
+    let lowest = Infinity;
+    let highest = -Infinity;
 
     for (let r = 0; r < dimensions.y; r++) {
       for (let q = 0; q < dimensions.x; q++) {
         const coords = { q, r };
         const worldPos = offsetToWorldSpace(coords);
-        const height = fractal(noise, { x: worldPos.x, y: worldPos.y }, frequency);
+        const height = genTiledNoise(noise4d, worldPos, dimensions, frequency, octaves);
+        heights[qrToIndex(coords, dimensions.x)] = height;
 
-        let details: number = 0b0000_0000_0000_0000;
-        if (height <= seaLevel) {
-          details |= 2 << 12; // water
-        } else if (height <= seaLevel + beachHeight) {
-          details |= 3 << 12; // beach
-        } else if (height >= mountainHeight) {
-          details |= 4 << 12; // mountain
-        } else {
-          const forestHeight = fractal(
-            noise,
-            { x: worldPos.x + 4000, y: worldPos.y + 4000 },
-            forestFreq,
-          );
-
-          if (forestHeight >= forestThreshold) {
-            details |= 1 << 12; // forest
-          } else {
-            details |= 0 << 12; // grass
-
-            if (prng() < longGrassChance) {
-              details |= 1 << 8; // tall grass cosmetic
-            }
-          }
-        }
-
-        this.cells[qrToIndex(coords, dimensions.x)] = { q, r, details };
+        if (height < lowest) lowest = height;
+        if (height > highest) highest = height;
       }
     }
+
+    // normalise heights
+    const heightRange = highest - lowest;
+    for (let i = 0; i < heights.length; i++) {
+      heights[i] = (heights[i] - lowest) / heightRange;
+    }
+
+    for (let i = 0; i < heights.length; i++) {
+      const coords = indexToQR(i, dimensions.x);
+      const worldPos = offsetToWorldSpace(coords);
+      const height = heights[i];
+
+      let details: number = 0b0000_0000_0000_0000;
+      if (height <= seaLevel) {
+        details |= 2 << 12; // water
+      } else if (height <= seaLevel + beachHeight) {
+        details |= 3 << 12; // beach
+      } else if (height >= mountainHeight) {
+        details |= 4 << 12; // mountain
+      } else {
+        const forestHeight = genTiledNoise(
+          noise4d,
+          { x: worldPos.x + 4000, y: worldPos.y + 4000 },
+          dimensions,
+          forestFreq,
+        );
+
+        if (forestHeight >= forestThreshold) {
+          details |= 1 << 12; // forest
+        } else {
+          details |= 0 << 12; // grass
+
+          if (prng() < longGrassChance) {
+            details |= 1 << 8; // tall grass cosmetic
+          }
+        }
+      }
+
+      this.cells[qrToIndex(coords, dimensions.x)] = { ...coords, details };
+    }
+
+    console.log("Done.");
   }
 
   public async pushToDb() {
